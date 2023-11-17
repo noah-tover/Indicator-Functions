@@ -1,0 +1,66 @@
+# This function builds off the trend direction channel indicator of the candlesticks package. It utilizes the donachion channel to identify trending & ranging markets
+# The indicator I built improves upon it by finding the percent of signals produced for each trend in the past n days. 
+library(candlesticks)
+direction_confidence <- function(x, n = 30, testlookback = 126, DCSector = 1/8){
+  trend_test <- TrendDetectionChannel(TS = OHLC(x), n = testlookback, DCSector = DCSector)
+  upsums <- runSum(trend_test$UpTrend, n = n)
+  downsums <- runSum(trend_test$DownTrend, n = n)
+  nosums <- runSum(trend_test$NoTrend, n = n)
+  uptrend <- upsums / n
+  downtrend <- downsums / n
+  notrend <- nosums / n
+  confidence <- cbind(uptrend, notrend, downtrend)
+  colnames(confidence) <- c('uptrend', 'downtrend', 'notrend')
+  return(confidence)
+}
+############################################
+# This function is a slight modification on TTR's MACD. It seeks to better process exponentially growing data.
+# It has interesting applications with Bitcoin & other cryptocurrencies.
+logMACD <- function (x, nFast = 12, nSlow = 26, nSig = 9, maType, percent = TRUE, 
+  ...) {
+  if (missing(maType)) {
+    maType <- "EMA"
+  }
+  if (is.list(maType)) {
+    maTypeInfo <- sapply(maType, is.list)
+    if (!(all(maTypeInfo) && length(maTypeInfo) == 3)) {
+      stop("If 'maType' is a list, you must specify\n ", 
+        "*three* MAs (see Examples section of ?MACD)")
+    }
+    if (!is.null(formals(maType[[1]][[1]])$n) && is.null(maType[[1]]$n)) {
+      maType[[1]]$n <- nFast
+    }
+    if (!is.null(formals(maType[[2]][[1]])$n) && is.null(maType[[2]]$n)) {
+      maType[[2]]$n <- nSlow
+    }
+    if (!is.null(formals(maType[[3]][[1]])$n) && is.null(maType[[3]]$n)) {
+      maType[[3]]$n <- nSig
+    }
+    mavg.fast <- do.call(maType[[1]][[1]], c(list(x), maType[[1]][-1]))
+    mavg.slow <- do.call(maType[[2]][[1]], c(list(x), maType[[2]][-1]))
+  }
+  else {
+    mavg.fast <- do.call(maType, c(list(x), list(n = nFast, 
+      ...)))
+    mavg.slow <- do.call(maType, c(list(x), list(n = nSlow, 
+      ...)))
+  }
+  if (percent) {
+    macd <- 100 * (mavg.fast/mavg.slow - 1)
+  }
+  else {
+    macd <- mavg.fast - mavg.slow
+  }
+  if (is.list(maType)) {
+    signal <- do.call(maType[[3]][[1]], c(list(macd), maType[[3]][-1]))
+  }
+  else signal <- do.call(maType, c(list(macd), list(n = nSig, 
+    ...)))
+  result <- cbind(macd, signal)
+  colnames(result) <- c("macd", "signal")
+  result$macd <- result$macd + max(result$macd, na.rm = TRUE) # Normalize MACD to apply log
+  result$signal <- result$signal + max(result$signal, na.rm = TRUE)
+  result <- log10(result)
+  return(result)
+}
+###########################################################
